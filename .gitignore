@@ -1,0 +1,16 @@
+# Ambiente Virtual do Python
+venv/
+.venv/
+
+# Banco de Dados Vetorial Local
+db/
+
+# Documentos de dados (PDFs, etc.)
+data/
+
+# Cache e arquivos de sistema do Python
+__pycache__/
+*.pyc
+
+# Configurações do VS Code
+.vscode/
