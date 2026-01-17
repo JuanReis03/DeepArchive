@@ -1,4 +1,4 @@
-# 🤖 DeepArchive
+# DeepArchive
 
 **DeepArchive** é um sistema de busca semântica inteligente projetado para aprimorar instrumentos de busca em arquivos permanentes. Este projeto, parte da minha pesquisa científica do grupo LTI DIGITAL, utiliza modelos de linguagem de larga escala (LLMs) para ir além da busca tradicional por palavras-chave.
 

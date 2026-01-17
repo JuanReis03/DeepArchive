@@ -33,8 +33,8 @@ while True:
         continue
 
     # Realiza a busca por similaridade
-    # k=3 -> traga os 3 chunks mais relevantes
-    search_results = vectorstore.similarity_search(query, k=3)
+    # k=5 -> traga os 5 chunks mais relevantes
+    search_results = vectorstore.similarity_search(query, k=5)
 
     print("\n--- Resultados da Busca ---")
     if not search_results:
