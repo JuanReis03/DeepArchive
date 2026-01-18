@@ -89,7 +89,8 @@ generation_chain = (
 
 print("\n--- Sistema Pronto! Pergunte sobre seus documentos. Digite 'sair' para encerrar ---")
 
-# 6. Loop de Conversa
+
+# 6. Loop de Conversa - RAG
 while True:
     query = input("\nVocê: ")
     if query.lower() in ['sair', 'exit', 'quit']:
@@ -143,3 +144,50 @@ while True:
 
     except Exception as e:
         print(f"\nOcorreu um erro na geração: {e}")
+
+           
+# ==============================================================================
+# 🔴 MODO RAG / CHAT (DESATIVADO) - Tire os '"""' abaixo para desativar a IA
+# ==============================================================================
+"""      
+# 6. Loop de Conversa - Padrão
+while True:
+    query = input("\nVocê: ")
+    if query.lower() in ['sair', 'exit', 'quit']:
+        break
+    
+    if not query.strip():
+        continue
+
+    # Inicia a contagem do tempo
+    start_time = time.time()
+
+    print("\nDeepArchive buscando fontes...", end="", flush=True)
+    
+    # --- Passo A: Recuperar Documentos (MANTENHA ISSO) ---
+    retrieved_docs = ensemble_retriever.invoke(query)
+    
+    # ==============================================================================
+    # 🟢 MODO BUSCA SIMPLES (ATIVO) - Use isso para mostrar apenas os documentos
+    # ==============================================================================
+    print(f"\n\n--- 🔎 Encontrei {len(retrieved_docs)} documentos relevantes: ---\n")
+    
+    for i, doc in enumerate(retrieved_docs):
+        # Limpa o nome do arquivo usando sua função auxiliar ou split direto
+        raw_source = doc.metadata.get('source', 'Desconhecido')
+        if "\\" in raw_source: clean_name = raw_source.split("\\")[-1]
+        elif "/" in raw_source: clean_name = raw_source.split("/")[-1]
+        else: clean_name = raw_source
+        
+        # Mostra o resultado
+        print(f"[Resultado {i+1}] 📂 Arquivo: {clean_name}")
+        # Mostra os primeiros 300 caracteres do conteúdo
+        print(f"📄 Trecho: \"{doc.page_content[:300].replace(chr(10), ' ')}...\"") 
+        print("-" * 50)
+    
+    # Exibir estatísticas de tempo apenas
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"⏱️  Tempo de busca: {elapsed_time:.2f} segundos")
+    
+    """
