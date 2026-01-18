@@ -110,5 +110,3 @@ Com a fundação do RAG e da interface estabelecida, os próximos passos focam e
 * **Nível de Produção (Deploy):**
     * **[Containerização]** Criar um `Dockerfile` e `docker-compose.yml` para empacotar a aplicação.
     * Estabelecer um *pipeline* de avaliação automatizada para medir a precisão das respostas geradas.
-
-## 🗺️ Planos Futuros (Roadmap)
