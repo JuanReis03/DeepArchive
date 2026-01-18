@@ -10,9 +10,11 @@ O objetivo é criar um "serviço de referência digital" capaz de compreender o 
 * **DeepSeek (via Ollama):** O modelo de LLM usado para gerar os *embeddings* (representações vetoriais) dos textos.
 * **Ollama:** Ferramenta para servir e gerenciar os modelos LLM localmente.
 * **LangChain:** O framework principal para construir o *pipeline* de processamento (carregar, dividir, indexar, consultar).
+* **BM25 (Rank_BM25):** Algoritmo para busca por palavras-chave (Sparse Retrieval).
+* **Docx2txt / PyPDF:** Processamento e ingestão de arquivos.
 * **ChromaDB:** O banco de dados vetorial de código aberto usado para armazenar e consultar os *embeddings*.
 
-## 🚀 Status Atual (Fase 1 - Concluída)
+## Fase 1 - Concluída
 
 O *pipeline* central do DeepArchive está 100% funcional. O que já foi implementado:
 
@@ -27,6 +29,23 @@ O *pipeline* central do DeepArchive está 100% funcional. O que já foi implemen
     * Geração de *embedding* para a consulta usando o mesmo modelo DeepSeek (garantindo consistência).
     * Realização da busca por similaridade (k=3) no ChromaDB, retornando os *chunks* de texto mais relevantes.
     * Exibição dos resultados com o conteúdo e a fonte (nome do arquivo e página).
+
+## Status Atual (Fase 2 - RAG & Interface Híbrida)
+
+O projeto evoluiu de um simples buscador para um **Assistente Inteligente Completo**. As funcionalidades atuais incluem:
+
+* **Ingestão Multiformato (`index.py`):**
+    * Suporte para leitura e processamento de arquivos **.pdf** e **.docx** (Word).
+    * Limpeza automática do banco de dados antigo antes da reindexação.
+    * Monitoramento de tempo de processamento.
+
+* **Busca Híbrida (Hybrid Search):**
+    * Combina a precisão da busca por palavras-chave (**BM25**) com o entendimento contextual da busca vetorial (**ChromaDB**).
+    * Utiliza *Ensemble Retriever* para garantir que termos técnicos exatos e conceitos abstratos sejam encontrados com igual eficiência.
+
+* **Pipeline RAG (`app.py`):**
+    * O sistema não apenas busca, mas **lê** os documentos e **responde** à pergunta do usuário.
+    * Citação explícita das fontes consultadas ao final da resposta.
 
 ## ⚙️ Como Executar o Projeto
 
@@ -73,23 +92,23 @@ O *pipeline* central do DeepArchive está 100% funcional. O que já foi implemen
         ```bash
         python query.py
         ```
-
 ## 🗺️ Planos Futuros (Roadmap)
 
-O *pipeline* atual é a fundação. Os próximos passos focam em expandir as funcionalidades, a usabilidade e a robustez do sistema, conforme delineado no documento da pesquisa:
+Com a fundação do RAG e da interface estabelecida, os próximos passos focam em robustez e funcionalidades avançadas:
 
 * **Melhorias na Ingestão de Dados:**
-    * Adicionar suporte a múltiplos formatos de arquivo (`.txt`, `.docx`, `.md`).
-    * Implementar OCR para extrair texto de PDFs baseados em imagem (scans).
+    * Implementar **OCR** para extrair texto de PDFs baseados em imagem (documentos digitalizados antigos).
 
+* **Melhorias na Busca e IA:**
+    * Implementar **filtragem por metadados** (ex: permitir que o usuário filtre a busca por ano ou autor antes de perguntar).
+    * Refinamento dos *prompts* do sistema para diferentes perfis de resposta (ex: "Modo Resumo" vs "Modo Detalhado").
+    
 * **Melhorias na Interface (UX):**
     * **[Prototipagem Rápida]** Substituir o `query.py` por uma interface web usando **Streamlit**.
     * Agrupar resultados da busca por arquivo de origem, exibindo as páginas relevantes (ex: "Arquivo X: págs 2, 5, 10").
 
-* **Melhorias na IA ("Cérebro"):**
-    * **[RAG]** Fazer com que o sistema **responda** às perguntas usando os *chunks* como contexto (Retrieval-Augmented Generation), em vez de apenas mostrar os *chunks*.
-    * Implementar **filtragem por metadados** (ex: buscar "IA Generativa" APENAS em documentos de 2024).
-
 * **Nível de Produção (Deploy):**
-    * **[Containerização]** Criar um `Dockerfile` e `docker-compose.yml` para empacotar a aplicação, facilitando o deploy.
-    * Estabelecer um *pipeline* de avaliação para medir a qualidade (precisão e *recall*) das respostas do sistema.
+    * **[Containerização]** Criar um `Dockerfile` e `docker-compose.yml` para empacotar a aplicação.
+    * Estabelecer um *pipeline* de avaliação automatizada para medir a precisão das respostas geradas.
+
+## 🗺️ Planos Futuros (Roadmap)
