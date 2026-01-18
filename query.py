@@ -147,8 +147,9 @@ while True:
 
            
 # ==============================================================================
-# 🔴 MODO RAG / CHAT (DESATIVADO) - Tire os '"""' abaixo para desativar a IA
+# 🟢 MODO BUSCA SIMPLES (ATIVO) - Use isso para mostrar apenas os documentos - retire as """ abaixo.
 # ==============================================================================
+
 """      
 # 6. Loop de Conversa - Padrão
 while True:
@@ -167,9 +168,6 @@ while True:
     # --- Passo A: Recuperar Documentos (MANTENHA ISSO) ---
     retrieved_docs = ensemble_retriever.invoke(query)
     
-    # ==============================================================================
-    # 🟢 MODO BUSCA SIMPLES (ATIVO) - Use isso para mostrar apenas os documentos
-    # ==============================================================================
     print(f"\n\n--- 🔎 Encontrei {len(retrieved_docs)} documentos relevantes: ---\n")
     
     for i, doc in enumerate(retrieved_docs):
