@@ -1,87 +1,145 @@
+import sys
+import time  # Importante para contar o tempo
+# --- Importações de IA e Banco de Dados ---
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_chroma import Chroma
-from langchain_classic.retrievers import EnsembleRetriever
+from langchain_ollama import ChatOllama
+
+# --- Importações de Busca (Retrievers) ---
+from langchain_classic.retrievers import EnsembleRetriever  
 from langchain_community.retrievers import BM25Retriever
+
+# --- Importações do Core do LangChain ---
 from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 # --- Definições ---
 DB_PATH = 'db'
-MODEL_NAME = "deepseek-llm"
+MODEL_NAME = "deepseek-llm"      # Modelo para Embeddings
+LLM_MODEL = "deepseek-llm"   # Modelo para o Chat
 
-print("--- Iniciando Configuração da Busca Híbrida ---")
+print("--- Inicializando o DeepArchive (Modo RAG com Metadados) ---")
 
-# 1. Carregar Modelo de Embedding
+# 1. Carregar Embedding e Banco Vetorial
+print("1. Carregando memória vetorial...")
 embeddings = OllamaEmbeddings(model=MODEL_NAME)
-print("1. Modelo de embedding carregado.")
+vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
 
-# 2. Carregar o Banco Vetorial (Chroma)
-vectorstore = Chroma(
-    persist_directory=DB_PATH,
-    embedding_function=embeddings
-)
-print("2. Banco de dados vetorial carregado.")
+# 2. Configurar Busca Híbrida (BM25 + Chroma)
+print("2. Indexando palavras-chave (BM25) em memória...")
+data = vectorstore.get()
+# Recria objetos Document para o BM25
+doc_objects = [Document(page_content=c, metadata=m) for c, m in zip(data['documents'], data['metadatas'])]
 
-# --- O TRUQUE DA BUSCA HÍBRIDA ---
-# Para usar o BM25 (palavras-chave), precisamos dos textos originais.
-# Vamos puxar todos os documentos que já estão salvos no Chroma para criar o índice BM25.
-print("3. Construindo índice de palavras-chave (BM25)...")
+if not doc_objects:
+    print("ERRO: O banco de dados está vazio! Rode o 'index.py' primeiro.")
+    sys.exit()
 
-# Pega todos os dados do banco
-data = vectorstore.get() 
-docs_content = data['documents']
-docs_metadatas = data['metadatas']
-
-# Recria objetos "Document" para o BM25
-doc_objects = []
-for content, meta in zip(docs_content, docs_metadatas):
-    doc_objects.append(Document(page_content=content, metadata=meta))
-
-# Cria o buscador por Palavra-Chave (BM25)
 bm25_retriever = BM25Retriever.from_documents(doc_objects)
-bm25_retriever.k = 5  # Trazer 5 melhores por palavra-chave
+bm25_retriever.k = 5  # Top 5 por palavra-chave
 
-# Cria o buscador Semântico (Chroma)
-chroma_retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+chroma_retriever = vectorstore.as_retriever(search_kwargs={"k": 5}) # Top 5 por semântica
 
-# Cria o ENSEMBLE (Híbrido)
-# weights=[0.5, 0.5] significa que damos 50% de peso para palavra-chave e 50% para semântica
-# Se quiser forçar mais a palavra exata, mude para [0.7, 0.3]
 ensemble_retriever = EnsembleRetriever(
     retrievers=[bm25_retriever, chroma_retriever],
-    weights=[0.5, 0.5] 
+    weights=[0.5, 0.5] # 50% peso para cada método
 )
 
-print("--- Sistema Pronto! ---")
+# 3. Configurar o Cérebro (LLM)
+print(f"3. Conectando ao modelo de chat ({LLM_MODEL})...")
+llm = ChatOllama(model=LLM_MODEL)
 
-# --- 3. Loop Interativo ---
+# 4. O Prompt
+template = """Você é um assistente de pesquisa acadêmica chamado DeepArchive.
+Use APENAS os contextos fornecidos abaixo para responder à pergunta do usuário.
+Se a resposta não estiver nos contextos, diga que não sabe. Não invente informações.
+Cite o nome dos arquivos fonte sempre que possível no corpo do texto.
+
+Contextos:
+{context}
+
+Pergunta: {question}
+
+Resposta:"""
+
+prompt = ChatPromptTemplate.from_template(template)
+
+# Função auxiliar para limpar nomes de arquivos
+def clean_source_name(source_path):
+    if "\\" in source_path: return source_path.split("\\")[-1]
+    elif "/" in source_path: return source_path.split("/")[-1]
+    return source_path
+
+# Função para formatar os documentos em uma string única
+def format_docs(docs):
+    formatted_docs = []
+    for doc in docs:
+        source = doc.metadata.get('source', 'Desconhecido')
+        clean_name = clean_source_name(source)
+        formatted_docs.append(f"[Fonte: {clean_name}]:\n{doc.page_content}")
+    return "\n\n".join(formatted_docs)
+
+# 5. Criar a "Corrente" APENAS de Geração (A recuperação faremos manualmente no loop)
+generation_chain = (
+    prompt
+    | llm
+    | StrOutputParser()
+)
+
+print("\n--- Sistema Pronto! Pergunte sobre seus documentos. Digite 'sair' para encerrar ---")
+
+# 6. Loop de Conversa
 while True:
-    query = input("\nDigite sua pergunta (ou 'sair'): ")
-    if query.lower() == 'sair':
+    query = input("\nVocê: ")
+    if query.lower() in ['sair', 'exit', 'quit']:
         break
     
     if not query.strip():
         continue
 
-    print(f"\nBuscando por: '{query}'...")
+    # Inicia a contagem do tempo
+    start_time = time.time()
 
-    # Agora usamos o ensemble_retriever.invoke em vez de vectorstore.similarity_search
-    results = ensemble_retriever.invoke(query)
-
-    print(f"\n--- Top Resultados Híbridos ---")
+    print("\nDeepArchive buscando fontes...", end="", flush=True)
     
-    if not results:
-        print("Nada encontrado.")
-        continue
+    # --- Passo A: Recuperar Documentos (Manual) ---
+    retrieved_docs = ensemble_retriever.invoke(query)
+    
+    # --- Passo B: Extrair Fontes ---
+    unique_sources = set() # Usamos um set para não repetir nomes
+    for doc in retrieved_docs:
+        raw_source = doc.metadata.get('source', 'Desconhecido')
+        unique_sources.add(clean_source_name(raw_source))
+    
+    # --- Passo C: Formatar Contexto ---
+    context_text = format_docs(retrieved_docs)
 
-    # Mostramos os resultados (limitado a 5 para não poluir)
-    for i, doc in enumerate(results[:5]):
-        source = doc.metadata.get('source', 'N/A')
-        # Tenta limpar o caminho para mostrar só o nome do arquivo
-        if "\\" in source:
-            source = source.split("\\")[-1]
-        elif "/" in source:
-            source = source.split("/")[-1]
-            
-        print(f"\n[Resultado {i+1}] Fonte: {source}")
-        print(f"Trecho: {doc.page_content[:300]}...") # Mostra só os primeiros 300 caracteres
-        print("-" * 40)
+    print("\rDeepArchive gerando resposta... ", end="") 
+    
+    # --- Passo D: Gerar Resposta ---
+    try:
+        # Passamos o contexto já formatado e a pergunta
+        for chunk in generation_chain.stream({"context": context_text, "question": query}):
+            print(chunk, end="", flush=True)
+        print("\n")
+        
+        # --- Passo E: Exibir Estatísticas ---
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        
+        # Formata o tempo (se for menos de 60s mostra segundos, se for mais, mostra min:seg)
+        if elapsed_time < 60:
+            time_str = f"{elapsed_time:.2f} segundos"
+        else:
+            minutes = int(elapsed_time // 60)
+            seconds = int(elapsed_time % 60)
+            time_str = f"{minutes}m {seconds}s"
+
+        print("-" * 50)
+        print(f"⏱️  Tempo total: {time_str}")
+        print(f"📂 Fontes consultadas: {', '.join(unique_sources)}")
+        print("-" * 50)
+
+    except Exception as e:
+        print(f"\nOcorreu um erro na geração: {e}")
