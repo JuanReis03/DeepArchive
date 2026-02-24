@@ -9,7 +9,7 @@ from langchain_chroma import Chroma
 # --- Definições ---
 DATA_PATH = 'data'
 DB_PATH = 'db'
-MODEL_NAME = "deepseek-llm"
+EMBEDDING_MODEL = "nomic-embed-text"
 
 # --- 0. Limpeza Automática do Banco Antigo ---
 if os.path.exists(DB_PATH):
@@ -41,14 +41,18 @@ if not documents:
 
 # --- 2. Dividir os Documentos ---
 print("\n--- 2. Processando Texto ---")
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1500, 
+    chunk_overlap=300,
+    separators=["\n\n", "\n", " ", ""] # Ordem de prioridade do corte
+)
 splits = text_splitter.split_documents(documents)
 print(f"Total de chunks criados: {len(splits)}")
 
 # --- 3. Carregar Modelo de Embedding ---
 print("\n--- 3. Carregando Modelo de IA ---")
-embeddings = OllamaEmbeddings(model=MODEL_NAME)
-print(f"Modelo '{MODEL_NAME}' pronto.")
+embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
+print(f"Modelo '{EMBEDDING_MODEL}' pronto.")
 
 # --- 4. Criar Banco Vetorial (Com Cronômetro) ---
 print("\n--- 4. Indexando no ChromaDB ---")

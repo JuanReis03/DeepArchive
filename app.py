@@ -9,6 +9,11 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+# --- Definições ---
+DB_PATH = 'db'
+MODEL_NAME = "deepseek-llm" # Esse continua sendo o cérebro que conversa
+EMBEDDING_MODEL = "nomic-embed-text" # O novo cérebro de busca
+
 # --- 1. Configuração Inicial da Página ---
 st.set_page_config(page_title="DeepArchive", page_icon="📚", layout="wide")
 
@@ -25,7 +30,7 @@ def clean_source_name(source_path):
 # O @st.cache_resource impede que o LLM e o Banco sejam recarregados a cada clique
 @st.cache_resource(show_spinner="Iniciando o Motor de Busca e IA. Aguarde...")
 def initialize_engine():
-    embeddings = OllamaEmbeddings(model=MODEL_NAME)
+    embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
     vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
     
     data = vectorstore.get()
