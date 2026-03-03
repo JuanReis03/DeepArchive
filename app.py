@@ -51,12 +51,15 @@ def initialize_engine():
         weights=[0.5, 0.5]
     )
     
-    llm = ChatOllama(model=MODEL_NAME)
+    llm = ChatOllama(model=MODEL_NAME, temperature=0.0)
     
-    template = """Você é um assistente de pesquisa acadêmica chamado DeepArchive.
-    Use APENAS os contextos fornecidos abaixo para responder à pergunta do usuário, fornecendo uma resposta detalhada e aprofundada.
-    Se a resposta não estiver nos contextos, diga que não sabe. Não invente informações.
-    Cite o nome dos arquivos fonte sempre que possível no corpo do texto.
+    template = """Você é um assistente de pesquisa acadêmica rigoroso chamado DeepArchive. Sua função é analisar os documentos do acervo e responder com base ESTRITAMENTE neles.
+
+    REGRAS ABSOLUTAS E INQUEBRÁVEIS:
+    1. Responda APENAS com base nas informações contidas nos [Contextos] fornecidos abaixo.
+    2. Se a resposta para a [Pergunta] não estiver explicitamente contida nos [Contextos], você é PROIBIDO de tentar deduzir ou alongar o assunto. Você DEVE responder EXATAMENTE com a seguinte frase e nada mais: "As informações solicitadas não constam nos documentos do acervo."
+    3. JAMAIS use seu conhecimento prévio de mundo para completar, inventar ou justificar respostas.
+    4. JAMAIS atribua falas, opiniões ou ações a pessoas, autores ou personagens que não estão explicitamente citados nos [Contextos].
 
     Contextos:
     {context}
