@@ -17,9 +17,6 @@ EMBEDDING_MODEL = "nomic-embed-text" # O novo cérebro de busca
 # --- 1. Configuração Inicial da Página ---
 st.set_page_config(page_title="DeepArchive", page_icon="📚", layout="wide")
 
-DB_PATH = 'db'
-MODEL_NAME = "deepseek-llm"
-
 # --- 2. Funções Auxiliares ---
 def clean_source_name(source_path):
     if "\\" in source_path: return source_path.split("\\")[-1]
@@ -27,7 +24,6 @@ def clean_source_name(source_path):
     return source_path
 
 # --- 3. Inicialização do Motor (Cacheado na Memória) ---
-# O @st.cache_resource impede que o LLM e o Banco sejam recarregados a cada clique
 @st.cache_resource(show_spinner="Iniciando o Motor de Busca e IA. Aguarde...")
 def initialize_engine():
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -43,12 +39,16 @@ def initialize_engine():
     bm25_retriever = BM25Retriever.from_documents(doc_objects)
     bm25_retriever.k = 3
     
-    # 2. Limite da busca semântica (ChromaDB)
-    chroma_retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    # 2. Limite da busca semântica (ChromaDB) com Nota de Corte
+    chroma_retriever = vectorstore.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"k": 3, "score_threshold": 0.45} # Ajuste de limite de similaridade
+    )
     
+    # 3. Pesos: 70% exatidão (BM25) e 30% contexto semântico (Chroma)
     ensemble_retriever = EnsembleRetriever(
         retrievers=[bm25_retriever, chroma_retriever],
-        weights=[0.5, 0.5]
+        weights=[0.6, 0.4]
     )
     
     llm = ChatOllama(model=MODEL_NAME, temperature=0.0)
@@ -86,13 +86,10 @@ st.markdown("Pesquise em seus acervos acadêmicos e documentos locais de forma i
 
 with st.sidebar:
     st.header("⚙️ Configurações")
-    
-    # O botão de rádio com os seus textos exatos
     modo_selecionado = st.radio(
         "Modo de Operação:",
         ("1️⃣ Busca Rápida (Semântica + Palavras Chaves)", "2️⃣ Assistente RAG (IA Generativa)")
     )
-    
     st.markdown("---")
     st.info("O Assistente RAG é mais lento, mas sintetiza a informação para você.")
 
@@ -123,20 +120,17 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
                 docs = retriever.invoke(pergunta)
             
             if not docs:
-                resposta = "Nenhum documento encontrado para esta pesquisa."
+                resposta = "Nenhum documento encontrado para esta pesquisa. A similaridade dos arquivos está abaixo da nota de corte."
                 st.markdown(resposta)
                 st.session_state.messages.append({"role": "assistant", "content": resposta})
             else:
                 st.markdown(f"**🔎 Encontrei {len(docs)} trechos relevantes:**")
-                
-                # Montamos uma string para o histórico
                 resposta_historico = f"**🔎 Encontrei {len(docs)} trechos relevantes:**\n\n"
                 
                 for i, doc in enumerate(docs):
                     source = clean_source_name(doc.metadata.get('source', 'Desconhecido'))
                     texto = doc.page_content[:600].replace('\n', ' ') + "..."
                     
-                    # Cria caixinhas expansíveis super elegantes
                     with st.expander(f"Resultado {i+1} 📂 {source}"):
                         st.write(texto)
                         
@@ -145,8 +139,6 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
                 elapsed = time.time() - start_time
                 rodape = f"\n*⏱️ Tempo de busca: {elapsed:.2f} segundos*"
                 st.caption(rodape)
-                
-                # Salva um resumo no histórico
                 st.session_state.messages.append({"role": "assistant", "content": resposta_historico + rodape})
 
         # ---------------------------------------------------------
@@ -157,35 +149,22 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
                 docs = retriever.invoke(pergunta)
             
             if not docs:
-                resposta = "Não encontrei informações nos documentos para responder a isso."
+                resposta = "Não encontrei informações nos documentos para responder a isso. Os termos não atingiram a similaridade mínima necessária."
                 st.markdown(resposta)
                 st.session_state.messages.append({"role": "assistant", "content": resposta})
             else:
-                # Formata contexto
                 context_text = "\n\n".join([f"[Fonte: {clean_source_name(d.metadata.get('source', '?'))}]:\n{d.page_content}" for d in docs])
                 
-                # Prepara o espaço vazio onde a IA vai "digitar" ao vivo
-                placeholder = st.empty()
-                texto_gerado = ""
-                
                 try:
-                    # Faz o streaming (digitação ao vivo)
-                    for chunk in chain.stream({"context": context_text, "question": pergunta}):
-                        texto_gerado += chunk
-                        # Adiciona um "bloco" no final para imitar cursor de texto
-                        placeholder.markdown(texto_gerado + "▌") 
+                    # Renderização acelerada nativa do Streamlit
+                    texto_gerado = st.write_stream(chain.stream({"context": context_text, "question": pergunta}))
                     
-                    # Retira o cursor ao finalizar
-                    placeholder.markdown(texto_gerado)
-                    
-                    # Extrai fontes e tempo
                     elapsed = time.time() - start_time
                     fontes_unicas = set([clean_source_name(d.metadata.get('source', '?')) for d in docs])
                     
                     rodape = f"\n\n---\n**⏱️ Tempo total:** {elapsed:.2f}s | **📂 Fontes Consultadas:** {', '.join(fontes_unicas)}"
                     st.caption(rodape)
                     
-                    # Salva no histórico
                     st.session_state.messages.append({"role": "assistant", "content": texto_gerado + rodape})
                     
                 except Exception as e:
