@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+from tqdm import tqdm # <-- Importação da barra de progresso
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama.embeddings import OllamaEmbeddings
@@ -54,17 +55,22 @@ print("\n--- 3. Carregando Modelo de IA ---")
 embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
 print(f"Modelo '{EMBEDDING_MODEL}' pronto.")
 
-# --- 4. Criar Banco Vetorial (Com Cronômetro) ---
+# --- 4. Criar Banco Vetorial (Com Cronômetro e Barra de Progresso) ---
 print("\n--- 4. Indexando no ChromaDB ---")
-print("Iniciando a criação do banco de dados vetorial. Aguarde...")
+print("Iniciando a criação do banco de dados vetorial...")
 
 start_time = time.time() # Inicia o cronômetro
 
-vectorstore = Chroma.from_documents(
-    documents=splits,
-    embedding=embeddings,
-    persist_directory=DB_PATH
-)
+# 4.1 Inicializa o banco vazio conectado ao modelo de embedding
+vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
+
+# 4.2 Define o tamanho do lote (batch). Pode aumentar ou diminuir dependendo da VRAM.
+batch_size = 100 
+
+# 4.3 Insere os documentos em lotes para a barra de progresso funcionar
+for i in tqdm(range(0, len(splits), batch_size), desc="Gerando Embeddings", unit="lote"):
+    batch = splits[i : i + batch_size]
+    vectorstore.add_documents(batch)
 
 end_time = time.time() # Para o cronômetro
 elapsed_time = end_time - start_time # Calcula a diferença
@@ -74,6 +80,6 @@ minutes = int(elapsed_time // 60)
 seconds = int(elapsed_time % 60)
 
 print("-" * 40)
-print(f"Concluido! Banco de dados salvo em '{DB_PATH}'.")
+print(f"Concluído! Banco de dados salvo em '{DB_PATH}'.")
 print(f"Tempo total de indexação: {minutes}m {seconds}s ({elapsed_time:.2f} segundos).")
 print("-" * 40)

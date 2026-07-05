@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import pandas as pd
 from langchain_ollama.embeddings import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_ollama import ChatOllama
@@ -11,8 +12,8 @@ from langchain_core.output_parsers import StrOutputParser
 
 # --- Definições ---
 DB_PATH = 'db'
-MODEL_NAME = "deepseek-llm" # Esse continua sendo o cérebro que conversa
-EMBEDDING_MODEL = "nomic-embed-text" # O novo cérebro de busca
+MODEL_NAME = "deepseek-llm" 
+EMBEDDING_MODEL = "nomic-embed-text" 
 
 # --- 1. Configuração Inicial da Página ---
 st.set_page_config(page_title="DeepArchive", page_icon="📚", layout="wide")
@@ -23,7 +24,7 @@ def clean_source_name(source_path):
     elif "/" in source_path: return source_path.split("/")[-1]
     return source_path
 
-# --- 3. Inicialização do Motor (Cacheado na Memória) ---
+# --- 3. Inicialização do Motor ---
 @st.cache_resource(show_spinner="Iniciando o Motor de Busca e IA. Aguarde...")
 def initialize_engine():
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -35,17 +36,14 @@ def initialize_engine():
     if not doc_objects:
         return None, None
     
-    # 1. Limite da busca por palavras-chave (BM25)    
     bm25_retriever = BM25Retriever.from_documents(doc_objects)
     bm25_retriever.k = 3
     
-    # 2. Limite da busca semântica (ChromaDB) com Nota de Corte
     chroma_retriever = vectorstore.as_retriever(
         search_type="similarity_score_threshold",
-        search_kwargs={"k": 3, "score_threshold": 0.45} # Ajuste de limite de similaridade
+        search_kwargs={"k": 3, "score_threshold": 0.45} 
     )
     
-    # 3. Pesos: 70% exatidão (BM25) e 30% contexto semântico (Chroma)
     ensemble_retriever = EnsembleRetriever(
         retrievers=[bm25_retriever, chroma_retriever],
         weights=[0.6, 0.4]
@@ -97,23 +95,56 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "Olá! O que você deseja pesquisar no acervo hoje?"}]
 
-for message in st.session_state.messages:
+# Loop que recria a tela sempre que o usuário interage com algum botão
+for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        
+        # Restaura a Tabela Analítica no histórico
+        if "df" in message:
+            st.dataframe(
+                message["df"],
+                column_config={
+                    "Arquivo": st.column_config.TextColumn("Arquivo", width="medium"),
+                    "Pág.": st.column_config.TextColumn("Pág.", width="small"),
+                    "Trecho Encontrado": st.column_config.TextColumn("Trecho do Documento", width="large")
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+        
+        # Restaura os botões de download no histórico
+        if "download_data" in message:
+            if message["download_type"] == "csv":
+                st.download_button(
+                    label="💾 Baixar Tabela (CSV)", 
+                    data=message["download_data"], 
+                    file_name=f"busca_{i}.csv", 
+                    mime="text/csv", 
+                    key=f"dl_csv_{i}"
+                )
+            elif message["download_type"] == "txt":
+                st.download_button(
+                    label="💾 Baixar Resposta (TXT)", 
+                    data=message["download_data"], 
+                    file_name=f"resposta_{i}.txt", 
+                    mime="text/plain", 
+                    key=f"dl_txt_{i}"
+                )
 
 # --- 7. Processamento da Pergunta ---
 if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar..."):
-    # Exibe e salva pergunta
     st.session_state.messages.append({"role": "user", "content": pergunta})
+    
     with st.chat_message("user"):
         st.markdown(pergunta)
 
-    # Processa a resposta
     with st.chat_message("assistant"):
         start_time = time.time()
+        msg_index = len(st.session_state.messages) # Usado para criar chaves únicas para os botões
         
         # ---------------------------------------------------------
-        # FLUXO 1: BUSCA RÁPIDA
+        # FLUXO 1: BUSCA RÁPIDA (Agrupamento e Download CSV)
         # ---------------------------------------------------------
         if "1️⃣" in modo_selecionado:
             with st.spinner("Buscando documentos relevantes..."):
@@ -124,25 +155,75 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
                 st.markdown(resposta)
                 st.session_state.messages.append({"role": "assistant", "content": resposta})
             else:
-                st.markdown(f"**🔎 Encontrei {len(docs)} trechos relevantes:**")
-                resposta_historico = f"**🔎 Encontrei {len(docs)} trechos relevantes:**\n\n"
+                tabela_dados = []
+                agrupamento = {}
                 
-                for i, doc in enumerate(docs):
+                # Prepara os dados para a Tabela e para o Agrupamento Visual
+                for doc in docs:
                     source = clean_source_name(doc.metadata.get('source', 'Desconhecido'))
-                    texto = doc.page_content[:600].replace('\n', ' ') + "..."
+                    pagina = doc.metadata.get('page', 'N/A')
+                    if isinstance(pagina, int): pagina = str(pagina + 1)
+                    texto = doc.page_content.replace('\n', ' ')
                     
-                    with st.expander(f"Resultado {i+1} 📂 {source}"):
-                        st.write(texto)
-                        
-                    resposta_historico += f"- **{source}**: {texto[:100]}...\n"
+                    # Alimenta a lista da tabela
+                    tabela_dados.append({"Arquivo": source, "Pág.": pagina, "Trecho Encontrado": texto})
+                    
+                    # Alimenta o dicionário de agrupamento
+                    if source not in agrupamento:
+                        agrupamento[source] = []
+                    agrupamento[source].append({"pag": pagina, "texto": texto})
+                
+                # Gera o arquivo CSV em memória
+                df = pd.DataFrame(tabela_dados)
+                csv_data = df.to_csv(index=False).encode('utf-8')
+                
+                cabecalho = f"**🔎 Encontrei {len(docs)} trechos relevantes em {len(agrupamento)} arquivo(s):**\n\n"
+                st.markdown(cabecalho)
+                
+                # Desenha as caixas expansíveis AGRUPADAS por arquivo
+                for source, trechos in agrupamento.items():
+                    with st.expander(f"📂 {source} ({len(trechos)} trecho(s) retornado(s))"):
+                        for t in trechos:
+                            st.markdown(f"**Pág. {t['pag']}:** {t['texto'][:350]}...")
+                            st.markdown("---")
+                
+                # Desenha a Tabela Analítica logo abaixo
+                st.markdown("### 📊 Tabela Analítica")
+                st.dataframe(
+                    df,
+                    column_config={
+                        "Arquivo": st.column_config.TextColumn("Arquivo", width="medium"),
+                        "Pág.": st.column_config.TextColumn("Pág.", width="small"),
+                        "Trecho Encontrado": st.column_config.TextColumn("Trecho do Documento", width="large")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
                 
                 elapsed = time.time() - start_time
                 rodape = f"\n*⏱️ Tempo de busca: {elapsed:.2f} segundos*"
                 st.caption(rodape)
-                st.session_state.messages.append({"role": "assistant", "content": resposta_historico + rodape})
+                
+                # Botão de Download do CSV
+                st.download_button(
+                    label="💾 Baixar Tabela (CSV)", 
+                    data=csv_data, 
+                    file_name=f"busca_{msg_index}.csv", 
+                    mime="text/csv", 
+                    key=f"dl_csv_{msg_index}"
+                )
+                
+                # Salva os dados na memória para sobreviver ao recarregamento da página
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": cabecalho + rodape, 
+                    "df": df,
+                    "download_data": csv_data,
+                    "download_type": "csv"
+                })
 
         # ---------------------------------------------------------
-        # FLUXO 2: ASSISTENTE RAG
+        # FLUXO 2: ASSISTENTE RAG (Download TXT)
         # ---------------------------------------------------------
         else:
             with st.spinner("Buscando fontes e analisando conteúdo para redigir a resposta..."):
@@ -156,8 +237,14 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
                 context_text = "\n\n".join([f"[Fonte: {clean_source_name(d.metadata.get('source', '?'))}]:\n{d.page_content}" for d in docs])
                 
                 try:
-                    # Renderização acelerada nativa do Streamlit
-                    texto_gerado = st.write_stream(chain.stream({"context": context_text, "question": pergunta}))
+                    placeholder = st.empty()
+                    texto_gerado = ""
+                    
+                    for chunk in chain.stream({"context": context_text, "question": pergunta}):
+                        texto_gerado += chunk
+                        placeholder.markdown(texto_gerado + "▌") 
+                    
+                    placeholder.markdown(texto_gerado)
                     
                     elapsed = time.time() - start_time
                     fontes_unicas = set([clean_source_name(d.metadata.get('source', '?')) for d in docs])
@@ -165,7 +252,25 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
                     rodape = f"\n\n---\n**⏱️ Tempo total:** {elapsed:.2f}s | **📂 Fontes Consultadas:** {', '.join(fontes_unicas)}"
                     st.caption(rodape)
                     
-                    st.session_state.messages.append({"role": "assistant", "content": texto_gerado + rodape})
+                    # Prepara o arquivo TXT para download
+                    conteudo_txt = f"Pergunta: {pergunta}\n\nResposta do DeepArchive:\n{texto_gerado}\n\nFontes Consultadas: {', '.join(fontes_unicas)}\nTempo de busca: {elapsed:.2f}s"
+                    
+                    # Botão de Download do TXT
+                    st.download_button(
+                        label="💾 Baixar Resposta (TXT)", 
+                        data=conteudo_txt, 
+                        file_name=f"resposta_rag_{msg_index}.txt", 
+                        mime="text/plain", 
+                        key=f"dl_txt_{msg_index}"
+                    )
+                    
+                    # Salva tudo no histórico
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": texto_gerado + rodape,
+                        "download_data": conteudo_txt,
+                        "download_type": "txt"
+                    })
                     
                 except Exception as e:
                     st.error(f"Erro ao gerar resposta: {e}")
