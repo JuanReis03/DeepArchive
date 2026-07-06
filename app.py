@@ -34,8 +34,16 @@ def initialize_engine():
     doc_objects = [Document(page_content=c, metadata=m) for c, m in zip(data['documents'], data['metadatas'])]
     
     if not doc_objects:
-        return None, None
+        return None, None, None
     
+    # --- NOVIDADE FASE 2.5: Montando o Catálogo do Acervo ---
+    catalogo_acervo = {}
+    for doc in doc_objects:
+        source = clean_source_name(doc.metadata.get('source', 'Desconhecido'))
+        if source not in catalogo_acervo:
+            # Puxa o resumo gerado pela IA no index.py. Se não existir (bancos antigos), mostra aviso.
+            catalogo_acervo[source] = doc.metadata.get('resumo_ia', 'Sem resumo disponível.')
+            
     bm25_retriever = BM25Retriever.from_documents(doc_objects)
     bm25_retriever.k = 3
     
@@ -69,10 +77,10 @@ def initialize_engine():
     prompt = ChatPromptTemplate.from_template(template)
     generation_chain = prompt | llm | StrOutputParser()
     
-    return ensemble_retriever, generation_chain
+    return ensemble_retriever, generation_chain, catalogo_acervo
 
 # --- 4. Carrega o sistema ---
-retriever, chain = initialize_engine()
+retriever, chain, catalogo_acervo = initialize_engine()
 
 if not retriever:
     st.error("ERRO: O banco de dados está vazio! Rode o 'index.py' no terminal primeiro.")
@@ -88,8 +96,19 @@ with st.sidebar:
         "Modo de Operação:",
         ("1️⃣ Busca Rápida (Semântica + Palavras Chaves)", "2️⃣ Assistente RAG (IA Generativa)")
     )
-    st.markdown("---")
     st.info("O Assistente RAG é mais lento, mas sintetiza a informação para você.")
+    
+    # --- NOVIDADE FASE 2.5: Vitrine do Acervo na Sidebar ---
+    st.markdown("---")
+    st.header("🗂️ Acervo Indexado")
+    with st.expander("Ver documentos e sumários"):
+        if catalogo_acervo:
+            for arquivo, resumo in catalogo_acervo.items():
+                st.markdown(f"**📂 {arquivo}**")
+                st.caption(f"_{resumo}_") # Exibe o resumo em itálico e menorzinho
+                st.markdown("---")
+        else:
+            st.write("Nenhum documento encontrado.")
 
 # --- 6. Histórico do Chat ---
 if "messages" not in st.session_state:
