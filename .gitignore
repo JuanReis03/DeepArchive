@@ -6,7 +6,8 @@ venv/
 db/
 
 # Documentos de dados (PDFs, etc.)
-data/
+data/*
+!data/.gitkeep
 
 # Cache e arquivos de sistema do Python
 __pycache__/
