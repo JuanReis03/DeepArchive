@@ -29,6 +29,20 @@ O projeto evoluiu de um simples buscador de terminal para um **Assistente Inteli
 * **Análise e Exportação de Dados:** Os resultados da busca rápida são agrupados por arquivo e organizados em uma Tabela Analítica. O usuário possui opções para exportar os dados brutos em `.csv` ou baixar os relatórios de respostas redigidas pela IA em formato `.txt`.
 * **Pipeline RAG Rigoroso (`app.py`):** O assistente generativo não apenas busca os trechos, mas formula respostas redigidas baseando-se **estritamente** no acervo. O sistema possui travas antifalucinação que o impedem de usar conhecimentos prévios e forçam a citação da bibliografia utilizada.
 
+## 📋 Pré-requisitos
+
+Antes de clonar e executar o sistema, certifique-se de ter as seguintes ferramentas instaladas no seu ambiente:
+
+* **[Python](https://www.python.org/downloads/) (v3.10 ou superior):** Recomendamos a versão 3.12. *Nota para usuários Windows: durante a instalação, certifique-se de marcar a caixa "Add python.exe to PATH".*
+* **[Git](https://git-scm.com/downloads):** Para o clone do repositório.
+* **[Ollama](https://ollama.com/download):** Motor necessário para rodar os Modelos de Linguagem (LLMs) localmente.
+
+**Modelos de IA Necessários:**
+Após instalar o Ollama, abra o seu terminal e faça o download dos modelos base executando os seguintes comandos:
+`ollama pull deepseek-llm` (Modelo RAG)
+`ollama pull llama3.2:1b` (Modelo de apoio/sumarização)
+`ollama pull nomic-embed-text` (Modelo de Embeddings)
+
 ## ⚙️ Como Executar o Projeto
 
 1.  **Clone o repositório:**
