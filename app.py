@@ -66,6 +66,7 @@ def initialize_engine():
     2. Se a resposta para a [Pergunta] não estiver explicitamente contida nos [Contextos], você é PROIBIDO de tentar deduzir ou alongar o assunto. Você DEVE responder EXATAMENTE com a seguinte frase e nada mais: "As informações solicitadas não constam nos documentos do acervo."
     3. JAMAIS use seu conhecimento prévio de mundo para completar, inventar ou justificar respostas.
     4. JAMAIS atribua falas, opiniões ou ações a pessoas, autores ou personagens que não estão explicitamente citados nos [Contextos].
+    5. Sempre que o usuário pedir para listar documentos, fontes ou arquivos, utilize o nome indicado em [Fonte: ...] no início de cada trecho de contexto.
 
     Contextos:
     {context}
@@ -77,10 +78,11 @@ def initialize_engine():
     prompt = ChatPromptTemplate.from_template(template)
     generation_chain = prompt | llm | StrOutputParser()
     
-    return ensemble_retriever, generation_chain, catalogo_acervo
+    # Exportamos também o vectorstore puro para podermos extrair a matemática depois
+    return ensemble_retriever, generation_chain, catalogo_acervo, vectorstore
 
 # --- 4. Carrega o sistema ---
-retriever, chain, catalogo_acervo = initialize_engine()
+retriever, chain, catalogo_acervo, vectorstore = initialize_engine()
 
 if not retriever:
     st.error("ERRO: O banco de dados está vazio! Rode o 'index.py' no terminal primeiro.")
@@ -98,12 +100,15 @@ with st.sidebar:
     )
     st.info("O Assistente RAG é mais lento, mas sintetiza a informação para você.")
     
-    # --- NOVIDADE FASE 2.5: Vitrine do Acervo na Sidebar ---
+    # --- Vitrine do Acervo na Sidebar ---
     st.markdown("---")
     st.header("🗂️ Acervo Indexado")
     with st.expander("Ver documentos e sumários"):
         if catalogo_acervo:
-            for arquivo, resumo in catalogo_acervo.items():
+            # Ordena alfabeticamente. Símbolos e números vão para o topo automaticamente!
+            catalogo_ordenado = sorted(catalogo_acervo.items(), key=lambda x: x[0].lower())
+            
+            for arquivo, resumo in catalogo_ordenado:
                 st.markdown(f"**📂 {arquivo}**")
                 st.caption(f"_{resumo}_") # Exibe o resumo em itálico e menorzinho
                 st.markdown("---")
@@ -124,6 +129,7 @@ for i, message in enumerate(st.session_state.messages):
             st.dataframe(
                 message["df"],
                 column_config={
+                    "Relevância": st.column_config.ProgressColumn("Relevância", format="%f%%", min_value=0, max_value=100),
                     "Arquivo": st.column_config.TextColumn("Arquivo", width="medium"),
                     "Pág.": st.column_config.TextColumn("Pág.", width="small"),
                     "Trecho Encontrado": st.column_config.TextColumn("Trecho do Documento", width="large")
@@ -163,54 +169,58 @@ if pergunta := st.chat_input("Digite o tema, autor ou conceito que deseja buscar
         msg_index = len(st.session_state.messages) # Usado para criar chaves únicas para os botões
         
         # ---------------------------------------------------------
-        # FLUXO 1: BUSCA RÁPIDA (Agrupamento e Download CSV)
+        # FLUXO 1: BUSCA RÁPIDA (Com Matemática de Similaridade)
         # ---------------------------------------------------------
         if "1️⃣" in modo_selecionado:
-            with st.spinner("Buscando documentos relevantes..."):
-                docs = retriever.invoke(pergunta)
+            with st.spinner("Calculando similaridade semântica e buscando documentos..."):
+                # Retorna os documentos E a nota de distância matemática
+                docs_and_scores = vectorstore.similarity_search_with_score(pergunta, k=4)
             
-            if not docs:
-                resposta = "Nenhum documento encontrado para esta pesquisa. A similaridade dos arquivos está abaixo da nota de corte."
+            if not docs_and_scores:
+                resposta = "Nenhum documento encontrado para esta pesquisa."
                 st.markdown(resposta)
                 st.session_state.messages.append({"role": "assistant", "content": resposta})
             else:
                 tabela_dados = []
                 agrupamento = {}
                 
-                # Prepara os dados para a Tabela e para o Agrupamento Visual
-                for doc in docs:
+                # Prepara os dados calculando a porcentagem
+                for doc, distancia in docs_and_scores:
+                    # ChromaDB retorna distância. Invertemos para criar uma porcentagem de similaridade
+                    similaridade = 1 / (1 + distancia)
+                    porcentagem = round(similaridade * 100, 1)
+
                     source = clean_source_name(doc.metadata.get('source', 'Desconhecido'))
                     pagina = doc.metadata.get('page', 'N/A')
                     if isinstance(pagina, int): pagina = str(pagina + 1)
                     texto = doc.page_content.replace('\n', ' ')
                     
-                    # Alimenta a lista da tabela
-                    tabela_dados.append({"Arquivo": source, "Pág.": pagina, "Trecho Encontrado": texto})
+                    tabela_dados.append({"Relevância": porcentagem, "Arquivo": source, "Pág.": pagina, "Trecho Encontrado": texto})
                     
-                    # Alimenta o dicionário de agrupamento
                     if source not in agrupamento:
                         agrupamento[source] = []
-                    agrupamento[source].append({"pag": pagina, "texto": texto})
+                    agrupamento[source].append({"pag": pagina, "texto": texto, "score": porcentagem})
                 
-                # Gera o arquivo CSV em memória
                 df = pd.DataFrame(tabela_dados)
                 csv_data = df.to_csv(index=False).encode('utf-8')
                 
-                cabecalho = f"**🔎 Encontrei {len(docs)} trechos relevantes em {len(agrupamento)} arquivo(s):**\n\n"
+                cabecalho = f"**🔎 Encontrei {len(docs_and_scores)} trechos relevantes em {len(agrupamento)} arquivo(s):**\n\n"
                 st.markdown(cabecalho)
                 
-                # Desenha as caixas expansíveis AGRUPADAS por arquivo
+                # Desenha as caixas com a justificativa matemática
                 for source, trechos in agrupamento.items():
                     with st.expander(f"📂 {source} ({len(trechos)} trecho(s) retornado(s))"):
                         for t in trechos:
+                            st.markdown(f"🎯 *Retornado com **{t['score']}%** de similaridade matemática.*")
                             st.markdown(f"**Pág. {t['pag']}:** {t['texto'][:350]}...")
                             st.markdown("---")
                 
-                # Desenha a Tabela Analítica logo abaixo
+                # Desenha a Tabela Analítica
                 st.markdown("### 📊 Tabela Analítica")
                 st.dataframe(
                     df,
                     column_config={
+                        "Relevância": st.column_config.ProgressColumn("Relevância", format="%f%%", min_value=0, max_value=100),
                         "Arquivo": st.column_config.TextColumn("Arquivo", width="medium"),
                         "Pág.": st.column_config.TextColumn("Pág.", width="small"),
                         "Trecho Encontrado": st.column_config.TextColumn("Trecho do Documento", width="large")

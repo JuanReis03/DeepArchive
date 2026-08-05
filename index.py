@@ -15,11 +15,17 @@ DATA_PATH = 'data'
 DB_PATH = 'db'
 EMBEDDING_MODEL = "nomic-embed-text"
 LLM_MODEL = "llama3.2:1b"
+RESETAR_BANCO = True # 🚨 NOVIDADE: Mude para False se quiser apenas adicionar arquivos novos (incremental)
 
 # --- 0. Inicializar Motor e Verificar Banco Existente ---
 print("\n--- 0. Verificando Banco de Dados ---")
-embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
 
+if RESETAR_BANCO and os.path.exists(DB_PATH):
+    print(f"⚠️ Atenção: Apagando banco de dados antigo em '{DB_PATH}' para evitar documentos fantasmas...")
+    shutil.rmtree(DB_PATH)
+    time.sleep(1) # Pausa rápida para o Windows liberar a pasta
+
+embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
 # Conecta ao banco (se não existir, ele cria um vazio)
 vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
 
