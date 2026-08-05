@@ -39,16 +39,17 @@ Antes de clonar e executar o sistema, certifique-se de ter as seguintes ferramen
 
 **Modelos de IA Necessários:**
 Após instalar o Ollama, abra o seu terminal e faça o download dos modelos base executando os seguintes comandos:
-`ollama pull deepseek-llm` (Modelo RAG)
-`ollama pull llama3.2:1b` (Modelo de apoio/sumarização)
-`ollama pull nomic-embed-text` (Modelo de Embeddings)
+
+1. `ollama pull deepseek-llm` (Modelo RAG)
+2. `ollama pull llama3.2:1b` (Modelo de apoio/sumarização)
+3. `ollama pull nomic-embed-text` (Modelo de Embeddings)
 
 ## ⚙️ Como Executar o Projeto
 
 1.  **Clone o repositório:**
     ```bash
     git clone [URL-DO-SEU-REPOSITÓRIO]
-    cd busca-de-arquivos-IC
+    cd DeepArchive
     ```
 
 2.  **Instale o Ollama e os Modelos Locais:**
