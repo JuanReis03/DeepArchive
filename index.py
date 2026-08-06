@@ -15,7 +15,7 @@ DATA_PATH = 'data'
 DB_PATH = 'db'
 EMBEDDING_MODEL = "nomic-embed-text"
 LLM_MODEL = "llama3.2:1b"
-RESETAR_BANCO = True # 🚨 NOVIDADE: Mude para False se quiser apenas adicionar arquivos novos (incremental)
+RESETAR_BANCO = False #Mude para False se quiser apenas adicionar arquivos novos (incremental)
 
 # --- 0. Inicializar Motor e Verificar Banco Existente ---
 print("\n--- 0. Verificando Banco de Dados ---")

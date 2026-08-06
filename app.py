@@ -107,6 +107,11 @@ with st.sidebar:
     # --- Vitrine do Acervo na Sidebar ---
     st.markdown("---")
     st.header("🗂️ Acervo Indexado")
+    
+    # Exibe a quantidade total de documentos anexados
+    if catalogo_acervo:
+        st.caption(f"**{len(catalogo_acervo)} documentos anexados**")
+    
     with st.expander("Ver documentos e sumários"):
         if catalogo_acervo:
             # Ordena alfabeticamente. Símbolos e números vão para o topo automaticamente!
@@ -117,7 +122,7 @@ with st.sidebar:
                 st.caption(f"_{resumo}_") # Exibe o resumo em itálico e menorzinho
                 st.markdown("---")
         else:
-            st.write("Nenhum documento encontrado.")
+            st.write("Nenhum documento encontrado."))
 
 # --- 6. Histórico do Chat ---
 if "messages" not in st.session_state:
