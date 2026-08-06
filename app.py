@@ -122,7 +122,7 @@ with st.sidebar:
                 st.caption(f"_{resumo}_") # Exibe o resumo em itálico e menorzinho
                 st.markdown("---")
         else:
-            st.write("Nenhum documento encontrado."))
+            st.write("Nenhum documento encontrado.")
 
 # --- 6. Histórico do Chat ---
 if "messages" not in st.session_state:
